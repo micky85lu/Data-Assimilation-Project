@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.integrate import odeint
 
 def lorenz63(x0, size, dt, sigma=10, r=28, b=8/3):
     x = np.zeros((size,))
