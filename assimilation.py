@@ -79,7 +79,7 @@ class ExtendedKF(DAbase):
         cycle_len = self._params['obs_interv']
         cycle_num = self._params['obs'].shape[1]
         
-        xb = self._params['X_ini']
+        xb = self._params['X_ini'].copy()
         obs = self._params['obs']
         Pb = self._params['Pb']
         R = self._params['R']
@@ -168,7 +168,7 @@ class OI(DAbase):
         cycle_len = self._params['obs_interv']
         cycle_num = self._params['obs'].shape[1]
         
-        xb = self._params['X_ini']
+        xb = self._params['X_ini'].copy()
         obs = self._params['obs']
         Pb = self._params['Pb']
         R = self._params['R']
@@ -263,7 +263,7 @@ class M3DVar(DAbase):
         cycle_len = self._params['obs_interv']
         cycle_num = self._params['obs'].shape[1]
         
-        xb = self._params['X_ini']
+        xb = self._params['X_ini'].copy()
         obs = self._params['obs']
         Pb = self._params['Pb']
         R = self._params['R']
@@ -354,7 +354,7 @@ class EnKF(DAbase):
         cycle_len = self._params['obs_interv']
         cycle_num = self._params['obs'].shape[1]
         
-        xb = self._params['X_ens_ini']
+        xb = self._params['X_ens_ini'].copy()
         obs = self._params['obs']
         R = self._params['R']
         H_func = self._params['H_func']
