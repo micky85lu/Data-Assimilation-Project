@@ -79,7 +79,7 @@ class ExtendedKF(DAbase):
         cycle_len = self._params['obs_interv']
         cycle_num = self._params['obs'].shape[1]
         
-        xb = self._params['X_ini'].copy()
+        xb = self._params['X_ini']
         obs = self._params['obs']
         Pb = self._params['Pb']
         R = self._params['R']
@@ -107,7 +107,7 @@ class ExtendedKF(DAbase):
             background[:,(idx1+1):idx2] = x_forecast[:,1:]
             
             # for next cycle
-            M = self._params['M'](xb[0,0], xb[1,0], xb[2,0])
+            M = self._params['M'](xb.ravel())
             Pb = alpha * Pb + (1-alpha) * M @ Pa @ M.T
             Pb *= inflat
             xb = x_forecast[:,[-1]]
@@ -168,7 +168,7 @@ class OI(DAbase):
         cycle_len = self._params['obs_interv']
         cycle_num = self._params['obs'].shape[1]
         
-        xb = self._params['X_ini'].copy()
+        xb = self._params['X_ini']
         obs = self._params['obs']
         Pb = self._params['Pb']
         R = self._params['R']
@@ -263,7 +263,7 @@ class M3DVar(DAbase):
         cycle_len = self._params['obs_interv']
         cycle_num = self._params['obs'].shape[1]
         
-        xb = self._params['X_ini'].copy()
+        xb = self._params['X_ini']
         obs = self._params['obs']
         Pb = self._params['Pb']
         R = self._params['R']
