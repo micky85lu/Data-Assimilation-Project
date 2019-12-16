@@ -28,7 +28,7 @@ def lorenz63_fdm(x0, ts, sigma=None, r=None, b=None):
     return np.vstack((x, y, z))
 
 
-def M(xi, yi, zi, dt, sigma=None, r=None, b=None):
+def M(x, dt, sigma=None, r=None, b=None):
     """tangent linear model for lorenz63_fdm"""
     if sigma is None:
         sigma = 10
@@ -36,6 +36,10 @@ def M(xi, yi, zi, dt, sigma=None, r=None, b=None):
         r = 28
     if b is None:
         b = 8/3
+    
+    xi = x[0]
+    yi = x[1]
+    zi = x[2]
     
     M = np.array([
         [1-sigma*dt, sigma*dt, 0],
