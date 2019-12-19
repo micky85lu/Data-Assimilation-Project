@@ -92,7 +92,7 @@ class ExtendedKF(DAbase):
         analysis = np.zeros_like(background)
         
         t_start = 0
-        ts = np.arange(t_start, cycle_len*dt, dt)
+        ts = np.linspace(t_start, (cycle_len-1)*dt, cycle_len)
         
         for nc in range(cycle_num):
             # analysis and forecast
@@ -112,7 +112,7 @@ class ExtendedKF(DAbase):
             Pb *= inflat
             xb = x_forecast[:,[-1]]
             t_start = int(ts[-1] + dt)
-            ts = np.arange(t_start, t_start+cycle_len*dt, dt)
+            ts = np.linspace(t_start, t_start+(cycle_len-1)*dt, cycle_len)
             
         self.background = background
         self.analysis = analysis
@@ -179,7 +179,7 @@ class OI(DAbase):
         analysis = np.zeros_like(background)
         
         t_start = 0
-        ts = np.arange(t_start, cycle_len*dt, dt)
+        ts = np.linspace(t_start, (cycle_len-1)*dt, cycle_len)
         
         for nc in range(cycle_num):
             # analysis and forecast
@@ -196,7 +196,7 @@ class OI(DAbase):
             # for next cycle
             xb = x_forecast[:,[-1]]
             t_start = int(ts[-1] + dt)
-            ts = np.arange(t_start, t_start+cycle_len*dt, dt)
+            ts = np.linspace(t_start, t_start+(cycle_len-1)*dt, cycle_len)
             
         self.background = background
         self.analysis = analysis
@@ -273,7 +273,7 @@ class M3DVar(DAbase):
         analysis = np.zeros_like(background)
         
         t_start = 0
-        ts = np.arange(t_start, cycle_len*dt, dt)
+        ts = np.linspace(t_start, (cycle_len-1)*dt, cycle_len)
         
         for nc in range(cycle_num):
             # analysis and forecast
@@ -290,7 +290,7 @@ class M3DVar(DAbase):
             # for next cycle
             xb = x_forecast[:,[-1]]
             t_start = int(ts[-1] + dt)
-            ts = np.arange(t_start, t_start+cycle_len*dt, dt)
+            ts = np.linspace(t_start, t_start+(cycle_len-1)*dt, cycle_len)
             
         self.background = background
         self.analysis = analysis
@@ -366,7 +366,7 @@ class EnKF(DAbase):
         analysis = np.zeros_like(background)
         
         t_start = 0
-        ts = np.arange(t_start, cycle_len*dt, dt)
+        ts = np.linspace(t_start, (cycle_len-1)*dt, cycle_len)
         
         for nc in range(cycle_num):
             # analysis
@@ -392,7 +392,7 @@ class EnKF(DAbase):
                 
             # for next cycle
             t_start = int(ts[-1] + dt)
-            ts = np.arange(t_start, t_start+cycle_len*dt, dt)
+            ts = np.linspace(t_start, t_start+(cycle_len-1)*dt, cycle_len)
             
         self.background = background
         self.analysis = analysis
@@ -666,8 +666,8 @@ class Hybrid3DEnVar(DAbase):
         background_3dvar = np.zeros((ndim, cycle_len*cycle_num))
         analysis_3dvar = np.zeros_like(background_3dvar)
         
-        t_start = 0
-        ts = np.arange(t_start, cycle_len*dt, dt)
+        t_start = 0 
+        ts = np.linspace(t_start, (cycle_len-1)*dt, cycle_len)
         
         for nc in range(cycle_num):
             ### analysis
@@ -692,7 +692,7 @@ class Hybrid3DEnVar(DAbase):
                 xa_ens = xa_ens + xa_3dvar
                 
             ### forecast
-            ts = np.linspace(0, cycle_len*dt, cycle_len)
+            ts = np.linspace(0, (cycle_len-1)*dt, cycle_len)
             x_forecast_3dvar = model(xa_3dvar.ravel(), ts)
             start_idx = nc * ts.size
             end_idx = start_idx + ts.size

@@ -92,7 +92,7 @@ class ExtendedKF(DAbase):
         analysis = np.zeros_like(background)
         
         t_start = 0
-        ts = np.arange(t_start, cycle_len*dt, dt)
+        ts = np.linspace(t_start, (cycle_len-1)*dt, cycle_len)
         
         for nc in range(cycle_num):
             # analysis and forecast
@@ -112,7 +112,7 @@ class ExtendedKF(DAbase):
             Pb *= inflat
             xb = x_forecast[:,[-1]]
             t_start = int(ts[-1] + dt)
-            ts = np.arange(t_start, t_start+cycle_len*dt, dt)
+            ts = np.linspace(t_start, t_start+(cycle_len-1)*dt, cycle_len)
             
         self.background = background
         self.analysis = analysis
@@ -179,7 +179,7 @@ class OI(DAbase):
         analysis = np.zeros_like(background)
         
         t_start = 0
-        ts = np.arange(t_start, cycle_len*dt, dt)
+        ts = np.linspace(t_start, (cycle_len-1)*dt, cycle_len)
         
         for nc in range(cycle_num):
             # analysis and forecast
@@ -196,7 +196,7 @@ class OI(DAbase):
             # for next cycle
             xb = x_forecast[:,[-1]]
             t_start = int(ts[-1] + dt)
-            ts = np.arange(t_start, t_start+cycle_len*dt, dt)
+            ts = np.linspace(t_start, t_start+(cycle_len-1)*dt, cycle_len)
             
         self.background = background
         self.analysis = analysis
@@ -273,7 +273,7 @@ class M3DVar(DAbase):
         analysis = np.zeros_like(background)
         
         t_start = 0
-        ts = np.arange(t_start, cycle_len*dt, dt)
+        ts = np.linspace(t_start, (cycle_len-1)*dt, cycle_len)
         
         for nc in range(cycle_num):
             # analysis and forecast
@@ -290,7 +290,7 @@ class M3DVar(DAbase):
             # for next cycle
             xb = x_forecast[:,[-1]]
             t_start = int(ts[-1] + dt)
-            ts = np.arange(t_start, t_start+cycle_len*dt, dt)
+            ts = np.linspace(t_start, t_start+(cycle_len-1)*dt, cycle_len)
             
         self.background = background
         self.analysis = analysis
@@ -366,7 +366,7 @@ class EnKF(DAbase):
         analysis = np.zeros_like(background)
         
         t_start = 0
-        ts = np.arange(t_start, cycle_len*dt, dt)
+        ts = np.linspace(t_start, (cycle_len-1)*dt, cycle_len)
         
         for nc in range(cycle_num):
             # analysis
@@ -392,7 +392,330 @@ class EnKF(DAbase):
                 
             # for next cycle
             t_start = int(ts[-1] + dt)
-            ts = np.arange(t_start, t_start+cycle_len*dt, dt)
+            ts = np.linspace(t_start, t_start+(cycle_len-1)*dt, cycle_len)
             
         self.background = background
         self.analysis = analysis
+        
+
+class M4DVar(DAbase):
+    def __init__(self, model, dt):
+        super().__init__(model, dt)
+        self._param_list = [
+            'X_ini', 
+            'obs', 
+            'window_num',
+            'window_len', 
+            'forecast_len',
+            'Pb', 
+            'R', 
+            'H_func', 
+            'H', 
+            'M', 
+        ]
+        
+    def list_params(self):
+        return self._param_list
+        
+    def set_params(self, **kwargs):
+        super().set_params(self._param_list, **kwargs)
+        
+    def _check_params(self):
+        if self._params.get('H_func') is None:
+            H_func = lambda arr: arr
+            self._params['H_func'] = H_func
+        if self._params.get('H') is None:
+            H = np.eye(self._params.get('R').shape[0])
+            self._params['H'] = H
+            
+        missing_params = super()._check_params(self._param_list)
+        if missing_params:
+            raise ValueError(f"Missing parameters: {missing_params}")
+            
+    def _find_window_range(self):
+        isobs = np.any(self._params['obs'] != 0, axis=0) + 0
+        win_start = []
+        win_end = []
+        for idx, iso in enumerate(isobs):
+            if idx == 0 and isobs[idx] == 1:
+                # start window
+                win_start.append(idx)
+                continue
+            if idx == len(isobs)-1:
+                if isobs[idx]:
+                    # end window
+                    win_end.append(idx)
+                    continue
+                else:
+                    continue
+
+            d = isobs[idx+1] - isobs[idx-1]
+            if d == 1 and isobs[idx] == 1:
+                # start window
+                win_start.append(idx)
+            elif d == -1 and isobs[idx] == 1:
+                # end window
+                win_end.append(idx)
+
+        win_range = list(zip(win_start, win_end))
+        self._win_range = win_range
+        
+    def _4dvar_costfunction(self, x, xb, xtrac, yo, Pb, R, H_func=None):
+        """
+        x, xb: (ndim, 1)
+        x_trac: (ndim, window)
+        Pb: (ndim, ndim)
+        yo: (N, window)
+        R: (window, N, N)
+        model, H_func: (window,)
+        """
+        assim_window_len = yo.shape[1]
+
+        if H_func is None:
+            H_func = [lambda arr: arr for _ in range(assim_window_len)]
+
+        part1 = (xb-x).T @ np.linalg.inv(Pb) @ (xb-x)
+        part2 = np.zeros_like(part1)
+        for j in range(assim_window_len):
+            yj = yo[:,[j]]
+            Rj = R[j,:,:]
+            H_j = H_func[j]
+            xtracj = xtrac[:,[j]]
+            part2 += (yj-H_j(xtracj)).T @ np.linalg.inv(Rj) @ (yj-H_j(xtracj))
+        return 0.5 * (part1 + part2)
+
+    def _gradient_4dvar_costfunction(self, x, xb, xtrac, yo, Pb, R, M, H_func=None, H=None):
+        """
+        x, xb: (ndim, 1)
+        xtrac: (ndim, window)
+        Pb: (ndim, ndim)
+        yo: (N, window)
+        R: (window, N, N)
+        H_func: (window,)
+        M: (window, ndim, ndim)
+        H: (window, N, ndim)
+        """
+        No, assim_window_len = yo.shape
+
+        if H_func is None:
+            H_func = [lambda arr: arr for _ in range(assim_window_len)]
+            H = np.concatenate([np.eye(No)[np.newaxis] for i in range(assim_window_len)])
+
+        part1 = np.linalg.inv(Pb) @ (x-xb)
+        part2 = np.zeros_like(part1)
+        for j in range(assim_window_len):
+            yj = yo[:,[j]]
+            Mj = M[j,:,:]
+            Hj = H[j,:,:]
+            Rj = R[j,:,:]
+            H_fj = H_func[j]
+            xtracj = xtrac[:,[j]]
+            part2 += Mj.T @ Hj.T @ np.linalg.inv(Rj) @ (yj - H_fj(xtracj))
+        return part1 - part2
+    
+    def _analysis(self, xb, obs, Pb, R, ts, model, M, win_len, r=0.01, maxiter=1000, epsilon=0.0001):
+        """find the x that minimizes the cost function"""
+        x = xb.copy()
+        
+        # gradient descent
+        for _ in range(maxiter):
+            # calculate trajectory
+            x_forecast = model(x.ravel(), ts)
+            
+            # calculate tangent linear model of every point on the trajectory
+            Ms = []
+            m = np.eye(3)
+            for i in range(win_len):
+                m = M(x_forecast[:,i]) @ m
+                Ms.append(m)
+            Ms = np.stack(Ms)
+            
+            # find the gradient and perform gradient descent
+            gradient = self._gradient_4dvar_costfunction(x, xb, x_forecast, obs, Pb, R, Ms)
+            x_new = x - r * gradient
+            
+            # stop criteria
+            if np.linalg.norm(gradient) <= epsilon:
+                x = x_new   # x is minize result
+                break
+            else:
+                x = x_new
+                
+        if _ == maxiter - 1:
+            warnings.warn('Iteration of gradient did not converge.')
+            
+        return x
+    
+    def cycle(self, r=0.01, maxiter=1000, epsilon=0.0001):
+        self._check_params()
+        self._find_window_range()
+        
+        xb = self._params['X_ini'].copy()
+        dt = self.dt
+        Pb = self._params['Pb']
+        R = self._params['R']
+        X_obs = self._params['obs']
+        model = self.model
+        M = self._params['M']
+        
+        background = np.zeros_like(X_obs)
+        analysis = np.zeros_like(X_obs)
+
+        print('Assimilation:')
+        for iwin, (start_win, end_win) in enumerate(self._win_range):
+            print(iwin+1, end=' ')
+
+            ### assimilation stage
+            win_len = end_win - start_win + 1
+            ts = np.linspace(0, (win_len-1)*dt, win_len)
+            x = xb.copy()
+            
+            if R.ndim == 2:
+                R = np.concatenate([R[np.newaxis,:,:] for i in range(win_len)])
+
+            # find observations in the assimilation window
+            obs = X_obs[:,start_win:end_win+1]
+
+            # gradient descent to minimize cost function
+            x = self._analysis(
+                xb, obs, Pb, R, ts, model, M, win_len, 
+                r, maxiter, epsilon
+            )
+
+            # analysis trajectory and analysis point (at the end of window)
+            xa_trajectory = model(x.ravel(), ts)
+            xa = xa_trajectory[:,[-1]]
+            analysis[:, start_win:end_win+1] = xa_trajectory
+            
+            ### forecast stage
+            if iwin != len(self._win_range)-1:
+                forecast_start = end_win + 1
+                forecast_end = self._win_range[iwin+1][0] - 1
+                forecast_len = forecast_end - forecast_start + 1
+                ts = np.linspace(0, (forecast_len-1)*dt, forecast_len)
+                xa_forecast = model(xa.ravel(), ts)
+                xb = xa_forecast[:,[-1]]   # the background of next assimilation
+                analysis[:, forecast_start:forecast_end+1] = xa_forecast
+            else:
+                # if it is the last assimilation window
+                forecast_start = end_win + 1
+                forecast_end = X_obs.shape[1] - 1
+                forecast_len = forecast_end - forecast_start + 1
+                ts = np.linspace(0, (forecast_len-1)*dt, forecast_len)
+                xa_forecast = model(xa.ravel(), ts)
+                analysis[:, forecast_start:forecast_end+1] = xa_forecast
+               
+        print()
+        self.background = background
+        self.analysis = analysis
+        
+        
+class Hybrid3DEnVar(DAbase):
+    def __init__(self, model, dt):
+        super().__init__(model, dt)
+        self._param_list = [
+            'X_ini', 
+            'X_ens_ini',
+            'obs', 
+            'obs_interv', 
+            'Pb', 
+            'R', 
+            'H_func', 
+            'H', 
+            'alpha', 
+            'inflat',
+            'beta'
+        ]
+        
+    def list_params(self):
+        return self._param_list
+        
+    def set_params(self, **kwargs):
+        super().set_params(self._param_list, **kwargs)
+        
+    def _check_params(self):
+        if self._params.get('H_func') is None:
+            H_func = lambda arr: arr
+            self._params['H_func'] = H_func
+            
+        missing_params = super()._check_params(self._param_list)
+        if missing_params:
+            raise ValueError(f"Missing parameters: {missing_params}")
+            
+    def cycle(self, recenter=True):
+        self._check_params()
+        
+        model = self.model
+        dt = self.dt
+        cycle_len = self._params['obs_interv']
+        cycle_num = self._params['obs'].shape[1]
+        
+        xb = self._params['X_ini'].copy()
+        xb_ens = self._params['X_ens_ini'].copy()
+        X_obs = self._params['obs']
+        Pb_3dvar = self._params['Pb']
+        R = self._params['R']
+        H_func = self._params['H_func']
+        alpha = self._params['alpha']
+        inflat = self._params['inflat']
+        beta = self._params['beta']
+        
+        ndim, N_ens = xb_ens.shape
+        background_ens = np.zeros((N_ens, ndim, cycle_len*cycle_num))
+        analysis_ens = np.zeros_like(background_ens)
+        background_3dvar = np.zeros((ndim, cycle_len*cycle_num))
+        analysis_3dvar = np.zeros_like(background_3dvar)
+        
+        t_start = 0 
+        ts = np.linspace(t_start, (cycle_len-1)*dt, cycle_len)
+        
+        for nc in range(cycle_num):
+            ### analysis
+            obs = X_obs[:,[nc]]
+            
+            ens_mean = xb_ens.mean(axis=1)[:,np.newaxis]
+            Pb_EnKF = (xb_ens - ens_mean) @ (xb_ens - ens_mean).T / (xb_ens.shape[1] - 1)
+            Pb = (1-beta) * Pb_3dvar + beta * Pb_EnKF
+            
+            xa_3dvar = M3DVar(model, dt)._analysis(xb, obs, Pb, R, H_func)
+            xa_3dvar = xa_3dvar[:,np.newaxis]
+            xa_ens = EnKF(model, dt)._analysis(xb_ens, obs, R, H_func)  # (ndim, N_ens)
+            
+            # inflat
+            xa_ens_pertb = xa_ens - xa_ens.mean(axis=1)[:,np.newaxis]
+            xa_ens_pertb *= inflat
+            xa_ens = xa_ens.mean(axis=1)[:,np.newaxis] + xa_ens_pertb
+            
+            if recenter:
+                xa_ensmean = xa_ens.mean(axis=1)[:,np.newaxis]
+                xa_ens_pertb = xa_ens - xa_ensmean
+                xa_ens = xa_ens + xa_3dvar
+                
+            ### forecast
+            ts = np.linspace(0, (cycle_len-1)*dt, cycle_len)
+            x_forecast_3dvar = model(xa_3dvar.ravel(), ts)
+            start_idx = nc * ts.size
+            end_idx = start_idx + ts.size
+            analysis_3dvar[:,start_idx:end_idx] = x_forecast_3dvar
+            background_3dvar[:,start_idx:end_idx] = x_forecast_3dvar
+            background_3dvar[:,start_idx] = xb.ravel()
+            
+            
+            x_forecast_ens = np.zeros((N_ens, ndim, ts.size))
+            for iens in range(N_ens):
+                x_forecast_ens[iens,:,:] = model(xa_ens[:,iens], ts)
+                analysis_ens[iens,:,start_idx:end_idx] = x_forecast_ens[iens,:,:]
+                background_ens[iens,:,start_idx:end_idx] = x_forecast_ens[iens,:,:]
+                background_ens[iens,:,start_idx] = xb_ens[:,iens]
+                
+            ### for next cycle
+            xb = x_forecast_3dvar[:,[-1]]
+            xb_ens = x_forecast_ens[:,:,-1].T
+            
+        self.analysis_3dvar = analysis_3dvar
+        self.background_3dvar = background_3dvar
+        self.analysis_ens = analysis_ens
+        self.background_ens = background_ens
+        
+        
+        
