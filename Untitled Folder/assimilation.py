@@ -251,7 +251,7 @@ class M3DVar(DAbase):
 
         invPb = np.linalg.inv(Pb)
         invR = np.linalg.inv(R)
-        cost_func = lambda x: self._3dvar_costfunction(x, xb.ravel(), yo, invPb, invR)
+        cost_func = lambda x: self._3dvar_costfunction(x, xb.ravel(), yo, invPb, invR, H_func)
 
         return minimize(cost_func, xb.ravel(), method='BFGS').x
     
