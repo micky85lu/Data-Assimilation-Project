@@ -1,6 +1,19 @@
+import sys
 import warnings
 import numpy as np
 from scipy.optimize import minimize
+
+
+def progressbar(i, tol, prefix='', size=60, file=sys.stdout):
+    def show(j):
+        x = int(size*j/tol)
+        file.write("%s[%s%s] %i/%i\r" % (prefix, "#"*x, "."*(size-x), j, tol))
+        file.flush()
+    show(i)
+    
+    if i == tol:
+        file.write("\n")
+        file.flush()
 
 
 class DAbase:
@@ -513,16 +526,22 @@ class M4DVar(DAbase):
             part2 += Mj.T @ Hj.T @ np.linalg.inv(Rj) @ (yj - H_fj(xtracj))
         return part1 - part2
     
-    def _analysis(self, xb, obs, Pb, R, ts, model, M, win_len, r=0.01, maxiter=1000, epsilon=0.0001):
+    def _analysis(self, xb, obs, Pb, R, ts, model, M, H_func, H, win_len, r=0.01, maxiter=1000, epsilon=0.0001):
         """find the x that minimizes the cost function"""
         x = xb.copy()
+        
+        # prepare H_func and H
+        if not isinstance(H_func, list) and callable(H_func):
+            H_func = [H_func for _ in range(win_len)]
+        if isinstance(H, np.ndarray) and H.ndim == 2:
+            H = np.stack([H for _ in range(win_len)])
         
         # gradient descent
         for _ in range(maxiter):
             # calculate trajectory
             x_forecast = model(x.ravel(), ts)
             
-            # calculate tangent linear model of every point on the trajectory
+            # prepare tangent linear model of every point on the trajectory
             Ms = []
             m = np.eye(3)
             for i in range(win_len):
@@ -531,7 +550,7 @@ class M4DVar(DAbase):
             Ms = np.stack(Ms)
             
             # find the gradient and perform gradient descent
-            gradient = self._gradient_4dvar_costfunction(x, xb, x_forecast, obs, Pb, R, Ms)
+            gradient = self._gradient_4dvar_costfunction(x, xb, x_forecast, obs, Pb, R, Ms, H_func, H)
             x_new = x - r * gradient
             
             # stop criteria
@@ -546,7 +565,7 @@ class M4DVar(DAbase):
             
         return x
     
-    def cycle(self, r=0.01, maxiter=1000, epsilon=0.0001):
+    def cycle(self, r=0.01, maxiter=1000, epsilon=0.0001, showbar=True):
         self._check_params()
         self._find_window_range()
         
@@ -557,13 +576,15 @@ class M4DVar(DAbase):
         X_obs = self._params['obs']
         model = self.model
         M = self._params['M']
+        H_func = self._params['H_func']
+        H = self._params['H']
         
-        background = np.zeros_like(X_obs)
-        analysis = np.zeros_like(X_obs)
+        analysis = np.zeros((xb.size, X_obs.shape[1]))
+        background = np.zeros_like(analysis)
 
-        print('Assimilation:')
         for iwin, (start_win, end_win) in enumerate(self._win_range):
-            print(iwin+1, end=' ')
+            if showbar:
+                progressbar(iwin+1, len(self._win_range), 'Assimilation: ')
 
             ### assimilation stage
             win_len = end_win - start_win + 1
@@ -578,7 +599,7 @@ class M4DVar(DAbase):
 
             # gradient descent to minimize cost function
             x = self._analysis(
-                xb, obs, Pb, R, ts, model, M, win_len, 
+                xb, obs, Pb, R, ts, model, M, H_func, H, win_len, 
                 r, maxiter, epsilon
             )
 
@@ -605,7 +626,6 @@ class M4DVar(DAbase):
                 xa_forecast = model(xa.ravel(), ts)
                 analysis[:, forecast_start:forecast_end+1] = xa_forecast
                
-        print()
         self.background = background
         self.analysis = analysis
         
