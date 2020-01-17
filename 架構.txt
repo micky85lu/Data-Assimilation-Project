@@ -3,3 +3,5 @@ main_test裡的是比較後來做的各種測試
 upload是最後整理完之後，上傳給老師的code
 之後要找東西的話，可能要先優先從main_test或upload找
 first_test裡的有些東西後來在main_test裡又被改掉了，比方說同化方法之類的
+
+之後的更新都會在SideProject/Data-Assimialtion裡
